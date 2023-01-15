@@ -1,4 +1,4 @@
-package chart
+package report
 
 import (
 	"bufio"
@@ -9,6 +9,7 @@ import (
 	"golang.org/x/tools/benchmark/parse"
 	"io"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -36,8 +37,9 @@ type SystemPerformanceBenchResult struct {
 }
 
 type SystemSizeBenchResult struct {
-	SystemName    string
-	DirectorySize int64
+	SystemName string
+	N          int64
+	BytesOp    float64
 }
 
 func GetBenchResults(r io.Reader) (BenchResults, error) {
@@ -61,12 +63,18 @@ func GetBenchResults(r io.Reader) (BenchResults, error) {
 		return BenchResults{}, fmt.Errorf("missing execution environment info in output: '%+v'", result)
 	}
 
-	results, err := getPerformanceBenchResults(bytes.NewReader(b))
+	performanceResults, err := getPerformanceBenchResults(bytes.NewReader(b))
 	if err != nil {
-		return BenchResults{}, errors.Wrap(err, "error getting results")
+		return BenchResults{}, errors.Wrap(err, "error getting performance results")
 	}
 
-	result.PerformanceResults = results
+	sizeResults, err := getSizeBenchResults(bytes.NewReader(b))
+	if err != nil {
+		return BenchResults{}, errors.Wrap(err, "error getting size results")
+	}
+
+	result.PerformanceResults = performanceResults
+	result.SizeResults = sizeResults
 
 	return result, err
 }
@@ -115,7 +123,7 @@ func getPerformanceBenchResults(r io.Reader) ([]PerformanceBenchResult, error) {
 				return nil, errors.Wrap(err, "error parsing benchmark name")
 			}
 
-			bench, ok := findBenchmark(results, benchmarkName)
+			bench, ok := findPerformanceBenchmark(results, benchmarkName)
 			if !ok {
 				results = append(results, PerformanceBenchResult{
 					BenchmarkName: benchmarkName,
@@ -144,7 +152,80 @@ func getPerformanceBenchResults(r io.Reader) ([]PerformanceBenchResult, error) {
 	return results, nil
 }
 
-func MakeResultChart(result PerformanceBenchResult) (chart.BarChart, error) {
+func getSizeBenchResults(r io.Reader) ([]SizeBenchResult, error) {
+	var results []SizeBenchResult
+
+	scan := bufio.NewScanner(r)
+	for scan.Scan() {
+		fields := strings.Fields(scan.Text())
+		if len(fields) != 4 {
+			continue
+		}
+
+		benchName := fields[0]
+		benchN := fields[1]
+		benchValue := fields[2]
+		benchUnit := fields[3]
+
+		if !strings.HasPrefix(benchName, "BenchmarkSize") {
+			continue
+		}
+
+		if benchUnit != "bytes/op" {
+			return nil, errors.New("invalid unit")
+		}
+
+		fmt.Println(benchName, benchN, benchValue, benchUnit)
+
+		systemName, benchmarkName, err := ParseSizeBenchmarkName(benchName)
+		if err != nil {
+			return nil, errors.Wrap(err, "error parsing benchmark name")
+		}
+
+		bench, ok := findSizeBenchmark(results, benchmarkName)
+		if !ok {
+			results = append(results, SizeBenchResult{
+				BenchmarkName: benchmarkName,
+				Systems:       nil,
+			})
+			bench = &results[len(results)-1]
+		}
+
+		f, err := strconv.ParseFloat(benchValue, 64)
+		if err != nil {
+			return nil, errors.Wrap(err, "error parsing value")
+		}
+
+		n, err := strconv.ParseInt(benchN, 10, 64)
+		if err != nil {
+			return nil, errors.Wrap(err, "error parsing n")
+		}
+
+		bench.Systems = append(bench.Systems, SystemSizeBenchResult{
+			SystemName: systemName,
+			N:          n,
+			BytesOp:    f,
+		})
+	}
+
+	if err := scan.Err(); err != nil {
+		return nil, errors.Wrap(err, "scan error")
+	}
+
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].BenchmarkName < results[j].BenchmarkName
+	})
+
+	for _, result := range results {
+		sort.Slice(result.Systems, func(i, j int) bool {
+			return result.Systems[i].SystemName < result.Systems[j].SystemName
+		})
+	}
+
+	return results, nil
+}
+
+func MakePerformanceResultChart(result PerformanceBenchResult) (chart.BarChart, error) {
 	graph := chart.BarChart{
 		Title: result.BenchmarkName,
 		Background: chart.Style{
@@ -177,6 +258,39 @@ func MakeResultChart(result PerformanceBenchResult) (chart.BarChart, error) {
 	return graph, nil
 }
 
+func MakeSizeResultChart(result SizeBenchResult) (chart.BarChart, error) {
+	graph := chart.BarChart{
+		Title: result.BenchmarkName,
+		Background: chart.Style{
+			Padding: chart.Box{
+				Top: 40,
+			},
+		},
+		Height:   512,
+		BarWidth: 100,
+		YAxis: chart.YAxis{
+			Name: "bytes per op",
+			Range: &chart.ContinuousRange{
+				Min: 0,
+				Max: 0,
+			},
+		},
+	}
+
+	for _, system := range result.Systems {
+		graph.Bars = append(graph.Bars, chart.Value{
+			Label: system.SystemName,
+			Value: system.BytesOp,
+		})
+
+		if v := system.BytesOp * 1.1; v > graph.YAxis.Range.GetMax() {
+			graph.YAxis.Range.SetMax(v)
+		}
+	}
+
+	return graph, nil
+}
+
 func ParsePerformanceBenchmarkName(name string) (string, string, error) {
 	split := strings.SplitN(name, "/", 3)
 	if len(split) != 3 {
@@ -186,7 +300,25 @@ func ParsePerformanceBenchmarkName(name string) (string, string, error) {
 	return split[1], split[2], nil
 }
 
-func findBenchmark(results []PerformanceBenchResult, benchmarkName string) (*PerformanceBenchResult, bool) {
+func ParseSizeBenchmarkName(name string) (string, string, error) {
+	split := strings.SplitN(name, "/", 3)
+	if len(split) != 3 {
+		return "", "", errors.New("invalid name")
+	}
+
+	return split[1], split[2], nil
+}
+
+func findPerformanceBenchmark(results []PerformanceBenchResult, benchmarkName string) (*PerformanceBenchResult, bool) {
+	for i := range results {
+		if results[i].BenchmarkName == benchmarkName {
+			return &results[i], true
+		}
+	}
+	return nil, false
+}
+
+func findSizeBenchmark(results []SizeBenchResult, benchmarkName string) (*SizeBenchResult, bool) {
 	for i := range results {
 		if results[i].BenchmarkName == benchmarkName {
 			return &results[i], true

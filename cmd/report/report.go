@@ -3,7 +3,7 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"github.com/boreq/db_benchmark/chart"
+	"github.com/boreq/db_benchmark/report"
 	"github.com/boreq/errors"
 	gochart "github.com/wcharczuk/go-chart/v2"
 	"os"
@@ -18,7 +18,7 @@ func main() {
 }
 
 func run() error {
-	results, err := chart.GetBenchResults(os.Stdin)
+	results, err := report.GetBenchResults(os.Stdin)
 	if err != nil {
 		return errors.Wrap(err, "error getting bench results")
 	}
@@ -43,10 +43,11 @@ func run() error {
 	readmeBuffer.WriteString(fmt.Sprintf("goos=%s\n", results.Goos))
 	readmeBuffer.WriteString(fmt.Sprintf("cpu=%s\n", results.Cpu))
 	readmeBuffer.WriteString("```\n")
+
 	readmeBuffer.WriteString("## Performance\n")
 
 	for _, result := range results.PerformanceResults {
-		resultsChart, err := chart.MakeResultChart(result)
+		resultsChart, err := report.MakePerformanceResultChart(result)
 		if err != nil {
 			return errors.Wrap(err, "error creating chart")
 		}
@@ -70,6 +71,40 @@ func run() error {
 		readmeBuffer.WriteString("```\n")
 		for _, system := range result.Systems {
 			readmeBuffer.WriteString(fmt.Sprintf("%s=%.0f ns per op\n", system.SystemName, system.NsOp))
+		}
+		readmeBuffer.WriteString("```\n")
+
+	}
+
+	readmeBuffer.WriteString("## Size\n")
+
+	for _, result := range results.SizeResults {
+		resultsChart, err := report.MakeSizeResultChart(result)
+		if err != nil {
+			return errors.Wrap(err, "error creating chart")
+		}
+
+		filename := fmt.Sprintf(
+			"%s.png",
+			strings.Replace(result.BenchmarkName, string(os.PathSeparator), "-", -1),
+		)
+
+		f, err := os.Create(path.Join(directory, filename))
+		if err != nil {
+			return errors.Wrap(err, "error creating chart file")
+		}
+
+		if err := resultsChart.Render(gochart.PNG, f); err != nil {
+			return errors.Wrap(err, "error rendering the chart")
+		}
+
+		fmt.Println(result.BenchmarkName, len(result.Systems))
+
+		readmeBuffer.WriteString(fmt.Sprintf("### %s\n", result.BenchmarkName))
+		readmeBuffer.WriteString(fmt.Sprintf("![](./%s)\n", filename))
+		readmeBuffer.WriteString("```\n")
+		for _, system := range result.Systems {
+			readmeBuffer.WriteString(fmt.Sprintf("%s=%.0f bytes per op (n=%d)\n", system.SystemName, system.BytesOp, system.N))
 		}
 		readmeBuffer.WriteString("```\n")
 
