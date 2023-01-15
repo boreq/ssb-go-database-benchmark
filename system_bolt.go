@@ -10,9 +10,15 @@ type BoltDatabaseSystem struct {
 	db *bbolt.DB
 }
 
-func NewBoltDatabaseSystem(dir string) (*BoltDatabaseSystem, error) {
+func NewBoltDatabaseSystem(dir string, fn func(options *bbolt.Options)) (*BoltDatabaseSystem, error) {
+	options := bbolt.DefaultOptions
+
+	if fn != nil {
+		fn(options)
+	}
+
 	f := path.Join(dir, "database.bolt")
-	db, err := bbolt.Open(f, 0600, nil)
+	db, err := bbolt.Open(f, 0600, options)
 	if err != nil {
 		return nil, errors.Wrap(err, "error opening the database")
 	}
@@ -44,6 +50,10 @@ func (b *BoltDatabaseSystem) Read(fn func(reader Reader) error) error {
 
 func (b *BoltDatabaseSystem) Close() error {
 	return b.db.Close()
+}
+
+func (b *BoltDatabaseSystem) Sync() error {
+	return b.db.Sync()
 }
 
 var boltBucketName = []byte("values")

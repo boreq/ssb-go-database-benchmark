@@ -9,10 +9,14 @@ type BadgerDatabaseSystem struct {
 	db *badger.DB
 }
 
-func NewBadgerDatabaseSystem(dir string) (*BadgerDatabaseSystem, error) {
+func NewBadgerDatabaseSystem(dir string, fn func(*badger.Options)) (*BadgerDatabaseSystem, error) {
 	opt := badger.
 		DefaultOptions(dir).
 		WithLoggingLevel(badger.ERROR)
+
+	if fn != nil {
+		fn(&opt)
+	}
 
 	db, err := badger.Open(opt)
 	if err != nil {
@@ -46,6 +50,10 @@ func (b *BadgerDatabaseSystem) Read(fn func(reader Reader) error) error {
 
 func (b *BadgerDatabaseSystem) Close() error {
 	return b.db.Close()
+}
+
+func (b *BadgerDatabaseSystem) Sync() error {
+	return b.db.Sync()
 }
 
 var badgerValuePrefix = []byte("value")

@@ -5,8 +5,8 @@ go 1.19
 require (
 	github.com/boreq/errors v0.1.0
 	github.com/dgraph-io/badger/v3 v3.2103.5
-	github.com/go-echarts/go-echarts/v2 v2.2.4
 	github.com/stretchr/testify v1.7.0
+	github.com/wcharczuk/go-chart/v2 v2.1.0
 	go.cryptoscope.co/margaret v0.4.3
 	go.etcd.io/bbolt v1.3.6
 	golang.org/x/tools v0.5.0
@@ -30,7 +30,6 @@ require (
 	github.com/klauspost/compress v1.12.3 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/wcharczuk/go-chart v2.0.1+incompatible // indirect
 	go.cryptoscope.co/luigi v0.3.6-0.20200131144242-3256b54e72c8 // indirect
 	go.opencensus.io v0.22.5 // indirect
 	golang.org/x/image v0.3.0 // indirect

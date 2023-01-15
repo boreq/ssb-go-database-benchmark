@@ -5,6 +5,7 @@ import "encoding/binary"
 type DatabaseSystem interface {
 	Update(func(updater Updater) error) error
 	Read(func(reader Reader) error) error
+	Sync() error
 	Close() error
 }
 

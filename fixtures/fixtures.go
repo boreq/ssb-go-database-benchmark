@@ -6,8 +6,8 @@ import (
 	"testing"
 )
 
-func Directory(t testing.TB) string {
-	name, err := os.MkdirTemp("", "scuttlego-test")
+func Directory(t testing.TB, dir string) string {
+	name, err := os.MkdirTemp(dir, "db-bench")
 	if err != nil {
 		t.Fatal(err)
 	}

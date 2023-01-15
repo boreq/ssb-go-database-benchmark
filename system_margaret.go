@@ -35,6 +35,10 @@ func (b *MargaretDatabaseSystem) Close() error {
 	return b.log.Close()
 }
 
+func (b *MargaretDatabaseSystem) Sync() error {
+	return nil
+}
+
 type MargaretReaderUpdater struct {
 	log *offset2.OffsetLog
 }
