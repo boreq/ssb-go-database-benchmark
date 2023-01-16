@@ -6,7 +6,6 @@ import (
 
 	"github.com/boreq/errors"
 	"github.com/golang/snappy"
-	"github.com/klauspost/compress/zstd"
 	"go.cryptoscope.co/margaret"
 	"go.cryptoscope.co/margaret/offset2"
 )
@@ -142,12 +141,8 @@ func NewMargaretZSTDEncoder(w io.Writer) MargaretZSTDEncoder {
 }
 
 func (enc MargaretZSTDEncoder) Encode(v interface{}) error {
-	writer, err := zstd.NewWriter(enc.w)
-	if err != nil {
-		return errors.Wrap(err, "error creating a writer")
-	}
-
-	_, err = io.Copy(writer, bytes.NewReader(v.([]byte)))
+	b := zstdEncoder.EncodeAll(v.([]byte), nil)
+	_, err := io.Copy(enc.w, bytes.NewReader(b))
 	return err
 }
 
@@ -158,16 +153,11 @@ func NewMargaretZSTDDecoder(r io.Reader) MargaretZSTDDecoder {
 }
 
 func (dec MargaretZSTDDecoder) Decode() (interface{}, error) {
-	reader, err := zstd.NewReader(dec.r)
+	b, err := io.ReadAll(dec.r)
 	if err != nil {
-		return nil, errors.Wrap(err, "error creating a reader")
+		return nil, errors.Wrap(err, "error reading all")
 	}
-
-	b, err := io.ReadAll(reader)
-	if err != nil {
-		return nil, err
-	}
-	return b, nil
+	return zstdDecoder.DecodeAll(b, nil)
 }
 
 type MargaretSnappyCodec struct {
