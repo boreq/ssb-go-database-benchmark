@@ -1,7 +1,6 @@
 package db_benchmark
 
 import (
-	"os"
 	"path"
 
 	"github.com/boreq/errors"
@@ -17,9 +16,6 @@ type BoltCodec interface {
 type BoltDatabaseSystem struct {
 	db    *bbolt.DB
 	codec BoltCodec
-
-	dir     string
-	options bbolt.Options
 }
 
 func NewBoltDatabaseSystem(dir string, fn func(options *bbolt.Options), codec BoltCodec) (*BoltDatabaseSystem, error) {
@@ -35,7 +31,7 @@ func NewBoltDatabaseSystem(dir string, fn func(options *bbolt.Options), codec Bo
 		return nil, errors.Wrap(err, "error opening the database")
 	}
 
-	return &BoltDatabaseSystem{db: db, dir: dir, options: options, codec: codec}, nil
+	return &BoltDatabaseSystem{db: db, codec: codec}, nil
 }
 
 func (b *BoltDatabaseSystem) Update(fn func(updater Updater) error) error {
@@ -61,30 +57,7 @@ func (b *BoltDatabaseSystem) Read(fn func(reader Reader) error) error {
 }
 
 func (b *BoltDatabaseSystem) Close() error {
-	// bolt grows its file in advance which confuses size measurements
-	// we are trying to give it a fair chance by compacting the database
-
-	newPath := path.Join(b.dir, "database.bolt.new")
-	newDB, err := bbolt.Open(newPath, 0600, &b.options)
-	if err != nil {
-		return errors.Wrap(err, "error opening the database for compacting")
-	}
-
-	if err := bbolt.Compact(newDB, b.db, 0); err != nil {
-		return errors.Wrap(err, "error running compact")
-	}
-
-	oldPath := b.db.Path()
-
-	if err := b.db.Close(); err != nil {
-		return errors.Wrap(err, "error closing the old database")
-	}
-
-	if err := newDB.Close(); err != nil {
-		return errors.Wrap(err, "error closing the new database")
-	}
-
-	return os.Rename(newPath, oldPath)
+	return b.db.Close()
 }
 
 func (b *BoltDatabaseSystem) Sync() error {
