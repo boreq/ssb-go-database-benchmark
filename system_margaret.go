@@ -2,18 +2,21 @@ package db_benchmark
 
 import (
 	"bytes"
+	"io"
+
 	"github.com/boreq/errors"
+	"github.com/golang/snappy"
+	"github.com/klauspost/compress/zstd"
 	"go.cryptoscope.co/margaret"
 	"go.cryptoscope.co/margaret/offset2"
-	"io"
 )
 
 type MargaretDatabaseSystem struct {
 	log *offset2.OffsetLog
 }
 
-func NewMargaretDatabaseSystem(dir string) (*MargaretDatabaseSystem, error) {
-	log, err := offset2.Open(dir, newMargaretCodec())
+func NewMargaretDatabaseSystem(dir string, codec margaret.Codec) (*MargaretDatabaseSystem, error) {
+	log, err := offset2.Open(dir, codec)
 	if err != nil {
 		return nil, errors.Wrap(err, "error calling open")
 	}
@@ -61,50 +64,158 @@ func (m *MargaretReaderUpdater) Get(seq Sequence) ([]byte, error) {
 	return v.([]byte), nil
 }
 
-type margaretCodec struct {
+type MargaretCodec struct {
 }
 
-func newMargaretCodec() *margaretCodec {
-	return &margaretCodec{}
+func NewMargaretCodec() *MargaretCodec {
+	return &MargaretCodec{}
 }
 
-func (m margaretCodec) Marshal(value interface{}) ([]byte, error) {
+func (m MargaretCodec) Marshal(value interface{}) ([]byte, error) {
 	return value.([]byte), nil
 }
 
-func (m margaretCodec) Unmarshal(data []byte) (interface{}, error) {
+func (m MargaretCodec) Unmarshal(data []byte) (interface{}, error) {
 	return data, nil
 }
 
-func (m margaretCodec) NewDecoder(reader io.Reader) margaret.Decoder {
-	return newMargaretDecoder(reader)
+func (m MargaretCodec) NewDecoder(reader io.Reader) margaret.Decoder {
+	return NewMargaretDecoder(reader)
 }
 
-func (m margaretCodec) NewEncoder(writer io.Writer) margaret.Encoder {
-	return newMargaretEncoder(writer)
+func (m MargaretCodec) NewEncoder(writer io.Writer) margaret.Encoder {
+	return NewMargaretEncoder(writer)
 }
 
-type margaretEncoder struct{ w io.Writer }
+type MargaretEncoder struct{ w io.Writer }
 
-func newMargaretEncoder(w io.Writer) margaretEncoder {
-	return margaretEncoder{w: w}
+func NewMargaretEncoder(w io.Writer) MargaretEncoder {
+	return MargaretEncoder{w: w}
 }
 
-func (enc margaretEncoder) Encode(v interface{}) error {
+func (enc MargaretEncoder) Encode(v interface{}) error {
 	_, err := io.Copy(enc.w, bytes.NewReader(v.([]byte)))
 	return err
 }
 
-type margaretDecoder struct{ r io.Reader }
+type MargaretDecoder struct{ r io.Reader }
 
-func newMargaretDecoder(r io.Reader) margaretDecoder {
-	return margaretDecoder{r: r}
+func NewMargaretDecoder(r io.Reader) MargaretDecoder {
+	return MargaretDecoder{r: r}
 }
 
-func (dec margaretDecoder) Decode() (interface{}, error) {
+func (dec MargaretDecoder) Decode() (interface{}, error) {
 	b, err := io.ReadAll(dec.r)
 	if err != nil {
 		return nil, err
 	}
 	return b, nil
+}
+
+type MargaretZSTDCodec struct {
+}
+
+func NewMargaretZSTDCodec() *MargaretZSTDCodec {
+	return &MargaretZSTDCodec{}
+}
+
+func (m MargaretZSTDCodec) Marshal(value interface{}) ([]byte, error) {
+	return zstdEncoder.EncodeAll(value.([]byte), nil), nil
+}
+
+func (m MargaretZSTDCodec) Unmarshal(data []byte) (interface{}, error) {
+	return zstdDecoder.DecodeAll(data, nil)
+}
+
+func (m MargaretZSTDCodec) NewDecoder(reader io.Reader) margaret.Decoder {
+	return NewMargaretZSTDDecoder(reader)
+}
+
+func (m MargaretZSTDCodec) NewEncoder(writer io.Writer) margaret.Encoder {
+	return NewMargaretZSTDEncoder(writer)
+}
+
+type MargaretZSTDEncoder struct{ w io.Writer }
+
+func NewMargaretZSTDEncoder(w io.Writer) MargaretZSTDEncoder {
+	return MargaretZSTDEncoder{w: w}
+}
+
+func (enc MargaretZSTDEncoder) Encode(v interface{}) error {
+	writer, err := zstd.NewWriter(enc.w)
+	if err != nil {
+		return errors.Wrap(err, "error creating a writer")
+	}
+
+	_, err = io.Copy(writer, bytes.NewReader(v.([]byte)))
+	return err
+}
+
+type MargaretZSTDDecoder struct{ r io.Reader }
+
+func NewMargaretZSTDDecoder(r io.Reader) MargaretZSTDDecoder {
+	return MargaretZSTDDecoder{r: r}
+}
+
+func (dec MargaretZSTDDecoder) Decode() (interface{}, error) {
+	reader, err := zstd.NewReader(dec.r)
+	if err != nil {
+		return nil, errors.Wrap(err, "error creating a reader")
+	}
+
+	b, err := io.ReadAll(reader)
+	if err != nil {
+		return nil, err
+	}
+	return b, nil
+}
+
+type MargaretSnappyCodec struct {
+}
+
+func NewMargaretSnappyCodec() *MargaretSnappyCodec {
+	return &MargaretSnappyCodec{}
+}
+
+func (m MargaretSnappyCodec) Marshal(value interface{}) ([]byte, error) {
+	return snappy.Encode(nil, value.([]byte)), nil
+}
+
+func (m MargaretSnappyCodec) Unmarshal(data []byte) (interface{}, error) {
+	return snappy.Decode(nil, data)
+}
+
+func (m MargaretSnappyCodec) NewDecoder(reader io.Reader) margaret.Decoder {
+	return NewMargaretSnappyDecoder(reader)
+}
+
+func (m MargaretSnappyCodec) NewEncoder(writer io.Writer) margaret.Encoder {
+	return NewMargaretSnappyEncoder(writer)
+}
+
+type MargaretSnappyEncoder struct{ w io.Writer }
+
+func NewMargaretSnappyEncoder(w io.Writer) MargaretSnappyEncoder {
+	return MargaretSnappyEncoder{w: w}
+}
+
+func (enc MargaretSnappyEncoder) Encode(v interface{}) error {
+	b := snappy.Encode(nil, v.([]byte))
+	_, err := io.Copy(enc.w, bytes.NewReader(b))
+	return err
+}
+
+type MargaretSnappyDecoder struct{ r io.Reader }
+
+func NewMargaretSnappyDecoder(r io.Reader) MargaretSnappyDecoder {
+	return MargaretSnappyDecoder{r: r}
+}
+
+func (dec MargaretSnappyDecoder) Decode() (interface{}, error) {
+	b, err := io.ReadAll(dec.r)
+	if err != nil {
+		return nil, err
+	}
+
+	return snappy.Decode(nil, b)
 }

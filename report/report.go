@@ -4,13 +4,14 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"github.com/boreq/errors"
-	"github.com/wcharczuk/go-chart/v2"
-	"golang.org/x/tools/benchmark/parse"
 	"io"
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/boreq/errors"
+	"github.com/wcharczuk/go-chart/v2"
+	"golang.org/x/tools/benchmark/parse"
 )
 
 type BenchResults struct {
@@ -225,6 +226,11 @@ func getSizeBenchResults(r io.Reader) ([]SizeBenchResult, error) {
 	return results, nil
 }
 
+const (
+	chartWidth    = 2000
+	chartBarWidth = 300
+)
+
 func MakePerformanceResultChart(result PerformanceBenchResult) (chart.BarChart, error) {
 	graph := chart.BarChart{
 		Title: result.BenchmarkName,
@@ -234,7 +240,8 @@ func MakePerformanceResultChart(result PerformanceBenchResult) (chart.BarChart, 
 			},
 		},
 		Height:   512,
-		BarWidth: 100,
+		BarWidth: chartBarWidth,
+		Width:    chartWidth,
 		YAxis: chart.YAxis{
 			Name: "ns per op",
 			Range: &chart.ContinuousRange{
@@ -267,7 +274,8 @@ func MakeSizeResultChart(result SizeBenchResult) (chart.BarChart, error) {
 			},
 		},
 		Height:   512,
-		BarWidth: 100,
+		BarWidth: chartBarWidth,
+		Width:    chartWidth,
 		YAxis: chart.YAxis{
 			Name: "bytes per op",
 			Range: &chart.ContinuousRange{

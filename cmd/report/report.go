@@ -3,12 +3,13 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"github.com/boreq/db_benchmark/report"
-	"github.com/boreq/errors"
-	gochart "github.com/wcharczuk/go-chart/v2"
 	"os"
 	"path"
 	"strings"
+
+	"github.com/boreq/db_benchmark/report"
+	"github.com/boreq/errors"
+	gochart "github.com/wcharczuk/go-chart/v2"
 )
 
 func main() {

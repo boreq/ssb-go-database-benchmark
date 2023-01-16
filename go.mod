@@ -5,6 +5,8 @@ go 1.19
 require (
 	github.com/boreq/errors v0.1.0
 	github.com/dgraph-io/badger/v3 v3.2103.5
+	github.com/golang/snappy v0.0.4
+	github.com/klauspost/compress v1.15.14
 	github.com/stretchr/testify v1.7.0
 	github.com/wcharczuk/go-chart/v2 v2.1.0
 	go.cryptoscope.co/margaret v0.4.3
@@ -23,11 +25,9 @@ require (
 	github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b // indirect
 	github.com/golang/groupcache v0.0.0-20190702054246-869f871628b6 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
-	github.com/golang/snappy v0.0.3 // indirect
 	github.com/google/flatbuffers v1.12.1 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
-	github.com/klauspost/compress v1.12.3 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	go.cryptoscope.co/luigi v0.3.6-0.20200131144242-3256b54e72c8 // indirect

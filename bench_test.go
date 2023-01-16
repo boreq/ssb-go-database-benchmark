@@ -3,16 +3,16 @@ package db_benchmark
 import (
 	"encoding/base64"
 	"fmt"
+	"math/rand"
+	"os"
+	"path/filepath"
+	"testing"
+
 	"github.com/boreq/db_benchmark/fixtures"
 	"github.com/boreq/errors"
 	"github.com/dgraph-io/badger/v3"
 	badgeroptions "github.com/dgraph-io/badger/v3/options"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/bbolt"
-	"math/rand"
-	"os"
-	"path/filepath"
-	"testing"
 )
 
 func BenchmarkPerformance(b *testing.B) {
@@ -134,25 +134,43 @@ type TestedDatabaseSystem struct {
 type DatabaseSystemConstructor func(dir string) (DatabaseSystem, error)
 
 func getDatabaseSystems() []TestedDatabaseSystem {
+	const badgerValueThreshold = 256
+	const badgerValueLogFileSize = 32 * 1024 * 1024
+
 	return []TestedDatabaseSystem{
 		{
-			Name: "bolt_default",
+			Name: "bolt",
 			DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
-				return NewBoltDatabaseSystem(dir, nil)
+				return NewBoltDatabaseSystem(dir, nil, NewNoopBoltCodec())
 			},
 		},
 		{
-			Name: "bolt_larger_initial_mmap",
+			Name: "bolt_snappy",
 			DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
-				return NewBoltDatabaseSystem(dir, func(options *bbolt.Options) {
-					options.InitialMmapSize = 100 * 1024 * 1024
+				return NewBoltDatabaseSystem(dir, nil, NewSnappyBoltCodec())
+			},
+		},
+		{
+			Name: "bolt_zstd",
+			DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
+				return NewBoltDatabaseSystem(dir, nil, NewZSTDBoltCodec())
+			},
+		},
+
+		{
+			Name: "badger",
+			DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
+				return NewBadgerDatabaseSystem(dir, func(options *badger.Options) {
+					options.Compression = badgeroptions.None
 				})
 			},
 		},
 		{
-			Name: "badger_default",
+			Name: "badger_snappy",
 			DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
-				return NewBadgerDatabaseSystem(dir, nil)
+				return NewBadgerDatabaseSystem(dir, func(options *badger.Options) {
+					options.Compression = badgeroptions.Snappy
+				})
 			},
 		},
 		{
@@ -164,9 +182,42 @@ func getDatabaseSystems() []TestedDatabaseSystem {
 			},
 		},
 		{
+			Name: "badger_snappy_threshold",
+			DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
+				return NewBadgerDatabaseSystem(dir, func(options *badger.Options) {
+					options.Compression = badgeroptions.Snappy
+					options.ValueThreshold = badgerValueThreshold
+					options.ValueLogFileSize = badgerValueLogFileSize
+				})
+			},
+		},
+		{
+			Name: "badger_zstd_threshold",
+			DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
+				return NewBadgerDatabaseSystem(dir, func(options *badger.Options) {
+					options.Compression = badgeroptions.ZSTD
+					options.ValueThreshold = badgerValueThreshold
+					options.ValueLogFileSize = badgerValueLogFileSize
+				})
+			},
+		},
+
+		{
 			Name: "margaret",
 			DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
-				return NewMargaretDatabaseSystem(dir)
+				return NewMargaretDatabaseSystem(dir, NewMargaretCodec())
+			},
+		},
+		{
+			Name: "margaret_snappy",
+			DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
+				return NewMargaretDatabaseSystem(dir, NewMargaretSnappyCodec())
+			},
+		},
+		{
+			Name: "margaret_zstd",
+			DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
+				return NewMargaretDatabaseSystem(dir, NewMargaretZSTDCodec())
 			},
 		},
 	}
@@ -185,7 +236,7 @@ func getBenchmarks() []Benchmark {
 
 	const sizeOfInsertedData = 1000
 
-	for _, n := range []int{1, 10, 100, 1000} {
+	for _, n := range []int{1, 1000} {
 		numberOfAppendsToPerform := n
 		benchmarks = append(benchmarks, []Benchmark{
 			{
@@ -211,7 +262,7 @@ func getBenchmarks() []Benchmark {
 	const readRandomSequencesMaxSequence = 100000
 	const readRandomSequencesBatchSize = 1000
 
-	for _, n := range []int{1, 10, 100, 1000} {
+	for _, n := range []int{1, 1000} {
 		numberOfSequencesToRead := n
 		benchmarks = append(benchmarks, []Benchmark{
 			{
