@@ -18,6 +18,7 @@ import (
 func BenchmarkPerformance(b *testing.B) {
 	testedDatabaseSystems := getDatabaseSystems()
 	benchmarks := getBenchmarks()
+	dataConstructors := getDataConstructors()
 	storageSystems, err := getStorageSystems()
 	if err != nil {
 		b.Fatal(err)
@@ -28,38 +29,46 @@ func BenchmarkPerformance(b *testing.B) {
 			b.Run(testedDatabaseSystem.Name, func(b *testing.B) {
 				for _, storageSystem := range storageSystems {
 					b.Run(storageSystem.Name, func(b *testing.B) {
-						for _, benchmark := range benchmarks {
-							b.Run(benchmark.Name, func(b *testing.B) {
-								dir := fixtures.Directory(b, storageSystem.Path)
+						for _, dataConstructor := range dataConstructors {
+							b.Run(dataConstructor.Name, func(b *testing.B) {
+								for _, benchmark := range benchmarks {
+									b.Run(benchmark.Name, func(b *testing.B) {
+										env := BenchmarkEnvironment{
+											DataConstructor: dataConstructor,
+										}
 
-								system, err := testedDatabaseSystem.DatabaseSystemConstructor(dir)
-								if err != nil {
-									b.Fatal(err)
-								}
+										dir := fixtures.Directory(b, storageSystem.Path)
 
-								if benchmark.SetupFunc != nil {
-									if err := benchmark.SetupFunc(b, system); err != nil {
-										b.Fatal(err)
-									}
-								}
+										system, err := testedDatabaseSystem.DatabaseSystemConstructor(dir)
+										if err != nil {
+											b.Fatal(err)
+										}
 
-								b.ResetTimer()
-								b.StartTimer()
+										if benchmark.SetupFunc != nil {
+											if err := benchmark.SetupFunc(b, system, env); err != nil {
+												b.Fatal(err)
+											}
+										}
 
-								for i := 0; i < b.N; i++ {
-									if err := benchmark.Func(b, system); err != nil {
-										b.Fatal(err)
-									}
-								}
+										b.ResetTimer()
+										b.StartTimer()
 
-								if err := system.Sync(); err != nil {
-									b.Fatal(err)
-								}
+										for i := 0; i < b.N; i++ {
+											if err := benchmark.Func(b, system, env); err != nil {
+												b.Fatal(err)
+											}
+										}
 
-								b.StopTimer()
+										if err := system.Sync(); err != nil {
+											b.Fatal(err)
+										}
 
-								if err := system.Close(); err != nil {
-									b.Fatal(err)
+										b.StopTimer()
+
+										if err := system.Close(); err != nil {
+											b.Fatal(err)
+										}
+									})
 								}
 							})
 						}
@@ -79,6 +88,8 @@ func BenchmarkSize(b *testing.B) {
 			b.Run(testedDatabaseSystem.Name, func(b *testing.B) {
 				for _, dataConstructor := range dataConstructors {
 					b.Run(dataConstructor.Name, func(b *testing.B) {
+						const maxValuesPerTransaction = 1000
+
 						dir := fixtures.Directory(b, "")
 
 						system, err := testedDatabaseSystem.DatabaseSystemConstructor(dir)
@@ -86,24 +97,39 @@ func BenchmarkSize(b *testing.B) {
 							b.Fatal(err)
 						}
 
-						const valuesPerN = 1000
+						b.ResetTimer()
+						b.StartTimer()
 
-						for i := 0; i < b.N; i++ {
+						var insertedValues int
+
+						for {
+							valuesToInsert := b.N - insertedValues
+							if valuesToInsert > maxValuesPerTransaction {
+								valuesToInsert = maxValuesPerTransaction
+							}
+
 							if err := system.Update(func(updater Updater) error {
-								for j := 0; j < valuesPerN; j++ {
+								for n := 0; n < valuesToInsert; n++ {
 									if err := updater.Append(dataConstructor.Fn()); err != nil {
-										return errors.Wrap(err, "error calling set")
+										return errors.Wrap(err, "error calling append")
 									}
 								}
 								return nil
 							}); err != nil {
 								b.Fatal(err)
 							}
+
+							insertedValues += valuesToInsert
+							if insertedValues >= b.N {
+								break
+							}
 						}
 
 						if err := system.Sync(); err != nil {
 							b.Fatal(err)
 						}
+
+						b.StopTimer()
 
 						if err := system.Close(); err != nil {
 							b.Fatal(err)
@@ -114,11 +140,11 @@ func BenchmarkSize(b *testing.B) {
 							b.Fatal(err)
 						}
 
-						bytesPerInsert := float64(size) / float64(b.N) / float64(valuesPerN)
+						bytesPerInsert := float64(size) / float64(b.N)
+						b.Logf("Run bench=%s with b.n=%d directory size: %d (%.0f per insert)", b.Name(), b.N, size, bytesPerInsert)
 
 						b.ReportMetric(bytesPerInsert, "bytes/op")
 						b.ReportMetric(0, "ns/op")
-						b.Logf("Run bench=%s with n=%d directory size: %d (%.0f per insert)", b.Name(), b.N, size, bytesPerInsert)
 					})
 				}
 			})
@@ -139,19 +165,19 @@ func getDatabaseSystems() []TestedDatabaseSystem {
 
 	return []TestedDatabaseSystem{
 		{
-			Name: "bolt",
+			Name: "bbolt",
 			DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
 				return NewBoltDatabaseSystem(dir, nil, NewNoopBoltCodec())
 			},
 		},
 		{
-			Name: "bolt_snappy",
+			Name: "bbolt_snappy",
 			DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
 				return NewBoltDatabaseSystem(dir, nil, NewSnappyBoltCodec())
 			},
 		},
 		{
-			Name: "bolt_zstd",
+			Name: "bbolt_zstd",
 			DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
 				return NewBoltDatabaseSystem(dir, nil, NewZSTDBoltCodec())
 			},
@@ -223,28 +249,55 @@ func getDatabaseSystems() []TestedDatabaseSystem {
 	}
 }
 
+type BenchmarkEnvironment struct {
+	DataConstructor DataConstructor
+}
+
 type Benchmark struct {
 	Name      string
 	SetupFunc BenchmarkFunc
 	Func      BenchmarkFunc
 }
 
-type BenchmarkFunc func(b *testing.B, databaseSystem DatabaseSystem) error
+type BenchmarkFunc func(b *testing.B, databaseSystem DatabaseSystem, env BenchmarkEnvironment) error
 
 func getBenchmarks() []Benchmark {
 	var benchmarks []Benchmark
 
-	const sizeOfInsertedData = 1000
+	const numberOfAppendsToPerformPerTransaction = 1000
 
-	for _, n := range []int{1, 1000} {
-		numberOfAppendsToPerform := n
-		benchmarks = append(benchmarks, []Benchmark{
-			{
-				Name: fmt.Sprintf("append_%04d_values", numberOfAppendsToPerform),
-				Func: func(b *testing.B, databaseSystem DatabaseSystem) error {
+	benchmarks = append(benchmarks, []Benchmark{
+		{
+			Name: "append",
+			Func: func(b *testing.B, databaseSystem DatabaseSystem, env BenchmarkEnvironment) error {
+				if err := databaseSystem.Update(func(updater Updater) error {
+					for i := 0; i < numberOfAppendsToPerformPerTransaction; i++ {
+						if err := updater.Append(env.DataConstructor.Fn()); err != nil {
+							return errors.Wrap(err, "error calling set")
+						}
+					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "error calling update")
+				}
+
+				return nil
+			},
+		},
+	}...)
+
+	const readRandomSequencesMaxSequence = 100000
+	const readRandomSequencesInsertBatchSize = 1000
+	const readRandomSequencesNumberOfSequencesToReadPerTransaction = 1000
+
+	benchmarks = append(benchmarks, []Benchmark{
+		{
+			Name: "read_random",
+			SetupFunc: func(b *testing.B, databaseSystem DatabaseSystem, env BenchmarkEnvironment) error {
+				for i := 0; i < readRandomSequencesMaxSequence/readRandomSequencesInsertBatchSize; i++ {
 					if err := databaseSystem.Update(func(updater Updater) error {
-						for i := 0; i < numberOfAppendsToPerform; i++ {
-							if err := updater.Append(fixtures.RandomBytes(sizeOfInsertedData)); err != nil {
+						for i := 0; i <= readRandomSequencesInsertBatchSize; i++ {
+							if err := updater.Append(env.DataConstructor.Fn()); err != nil {
 								return errors.Wrap(err, "error calling set")
 							}
 						}
@@ -252,58 +305,67 @@ func getBenchmarks() []Benchmark {
 					}); err != nil {
 						return errors.Wrap(err, "error calling update")
 					}
+				}
 
-					return nil
-				},
+				return nil
 			},
-		}...)
-	}
-
-	const readRandomSequencesMaxSequence = 100000
-	const readRandomSequencesBatchSize = 1000
-
-	for _, n := range []int{1, 1000} {
-		numberOfSequencesToRead := n
-		benchmarks = append(benchmarks, []Benchmark{
-			{
-				Name: fmt.Sprintf("read_%04d_random_sequences", numberOfSequencesToRead),
-				SetupFunc: func(b *testing.B, databaseSystem DatabaseSystem) error {
-					for i := 0; i < readRandomSequencesMaxSequence/readRandomSequencesBatchSize; i++ {
-						if err := databaseSystem.Update(func(updater Updater) error {
-							for i := 0; i <= readRandomSequencesBatchSize; i++ {
-								if err := updater.Append(fixtures.RandomBytes(sizeOfInsertedData)); err != nil {
-									return errors.Wrap(err, "error calling set")
-								}
-							}
-							return nil
-						}); err != nil {
-							return errors.Wrap(err, "error calling update")
+			Func: func(b *testing.B, databaseSystem DatabaseSystem, env BenchmarkEnvironment) error {
+				if err := databaseSystem.Read(func(reader Reader) error {
+					for i := 0; i < readRandomSequencesNumberOfSequencesToReadPerTransaction; i++ {
+						value, err := reader.Get(Sequence(rand.Intn(readRandomSequencesMaxSequence + 1)))
+						if err != nil {
+							return errors.Wrap(err, "error calling get")
 						}
+
+						require.NotEmpty(b, value)
 					}
 
 					return nil
-				},
-				Func: func(b *testing.B, databaseSystem DatabaseSystem) error {
-					if err := databaseSystem.Read(func(reader Reader) error {
-						for i := 0; i < numberOfSequencesToRead; i++ {
-							value, err := reader.Get(Sequence(rand.Intn(readRandomSequencesMaxSequence + 1)))
-							if err != nil {
-								return errors.Wrap(err, "error calling get")
+				}); err != nil {
+					return errors.Wrap(err, "error calling read")
+				}
+
+				return nil
+			},
+		},
+		{
+			Name: "read_sequential",
+			SetupFunc: func(b *testing.B, databaseSystem DatabaseSystem, env BenchmarkEnvironment) error {
+				for i := 0; i < readRandomSequencesMaxSequence/readRandomSequencesInsertBatchSize; i++ {
+					if err := databaseSystem.Update(func(updater Updater) error {
+						for i := 0; i <= readRandomSequencesInsertBatchSize; i++ {
+							if err := updater.Append(env.DataConstructor.Fn()); err != nil {
+								return errors.Wrap(err, "error calling set")
 							}
-
-							require.NotEmpty(b, value)
 						}
-
 						return nil
 					}); err != nil {
-						return errors.Wrap(err, "error calling read")
+						return errors.Wrap(err, "error calling update")
+					}
+				}
+
+				return nil
+			},
+			Func: func(b *testing.B, databaseSystem DatabaseSystem, env BenchmarkEnvironment) error {
+				if err := databaseSystem.Read(func(reader Reader) error {
+					for i := 0; i < readRandomSequencesNumberOfSequencesToReadPerTransaction; i++ {
+						value, err := reader.Get(Sequence(i))
+						if err != nil {
+							return errors.Wrap(err, "error calling get")
+						}
+
+						require.NotEmpty(b, value)
 					}
 
 					return nil
-				},
+				}); err != nil {
+					return errors.Wrap(err, "error calling read")
+				}
+
+				return nil
 			},
-		}...)
-	}
+		},
+	}...)
 
 	return benchmarks
 }

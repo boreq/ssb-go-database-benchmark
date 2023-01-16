@@ -78,6 +78,9 @@ func run() error {
 	}
 
 	readmeBuffer.WriteString("## Size\n")
+	readmeBuffer.WriteString("\n")
+	readmeBuffer.WriteString("Warning: bbolt metrics are not reliable as bbolt grows its file in large increments. Initially the size of the underlying file is multiplied by two and then once it is at above 1 GiB in size 1 GiB is added to it every time the database runs out of space.")
+	readmeBuffer.WriteString("\n")
 
 	for _, result := range results.SizeResults {
 		resultsChart, err := report.MakeSizeResultChart(result)
