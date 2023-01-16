@@ -176,8 +176,6 @@ func getSizeBenchResults(r io.Reader) ([]SizeBenchResult, error) {
 			return nil, errors.New("invalid unit")
 		}
 
-		fmt.Println(benchName, benchN, benchValue, benchUnit)
-
 		systemName, benchmarkName, err := ParseSizeBenchmarkName(benchName)
 		if err != nil {
 			return nil, errors.Wrap(err, "error parsing benchmark name")

@@ -99,8 +99,6 @@ func run() error {
 			return errors.Wrap(err, "error rendering the chart")
 		}
 
-		fmt.Println(result.BenchmarkName, len(result.Systems))
-
 		readmeBuffer.WriteString(fmt.Sprintf("### %s\n", result.BenchmarkName))
 		readmeBuffer.WriteString(fmt.Sprintf("![](./%s)\n", filename))
 		readmeBuffer.WriteString("```\n")
