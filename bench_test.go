@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/boreq/db_benchmark/fixtures"
@@ -160,68 +161,72 @@ func getDatabaseSystems(tb testing.TB) []TestedDatabaseSystem {
 	var v []TestedDatabaseSystem
 
 	if os.Getenv("ENABLE_BBOLT") != "" {
-		v = append(v,
-			[]TestedDatabaseSystem{
-				{
-					Name: "bbolt",
-					DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
-						return NewBoltDatabaseSystem(dir, nil, NewNoopBoltCodec())
-					},
-				},
-			}...,
-		)
-
-		if os.Getenv("ENABLE_BOLT_ON_COMPRESSION") != "" {
+		for _, transactionSize := range []int{5000} {
 			v = append(v,
 				[]TestedDatabaseSystem{
 					{
-						Name: "bbolt_snappy",
+						Name: "bbolt_" + strconv.Itoa(transactionSize),
 						DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
-							return NewBoltDatabaseSystem(dir, nil, NewSnappyBoltCodec())
-						},
-					},
-					{
-						Name: "bbolt_zstd",
-						DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
-							return NewBoltDatabaseSystem(dir, nil, NewZSTDBoltCodec())
+							return NewBoltDatabaseSystem(dir, nil, NewNoopBoltCodec(), transactionSize)
 						},
 					},
 				}...,
 			)
+
+			if os.Getenv("ENABLE_BOLT_ON_COMPRESSION") != "" {
+				v = append(v,
+					[]TestedDatabaseSystem{
+						{
+							Name: "bbolt_snappy_" + strconv.Itoa(transactionSize),
+							DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
+								return NewBoltDatabaseSystem(dir, nil, NewSnappyBoltCodec(), transactionSize)
+							},
+						},
+						{
+							Name: "bbolt_zstd_" + strconv.Itoa(transactionSize),
+							DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
+								return NewBoltDatabaseSystem(dir, nil, NewZSTDBoltCodec(), transactionSize)
+							},
+						},
+					}...,
+				)
+			}
 		}
 	} else {
 		tb.Log("ENABLE_BBOLT is not set")
 	}
 
 	if os.Getenv("ENABLE_BADGER") != "" {
-		v = append(v,
-			[]TestedDatabaseSystem{
-				{
-					Name: "badger",
-					DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
-						return NewBadgerDatabaseSystem(dir, func(options *badger.Options) {
-							options.Compression = badgeroptions.None
-						})
+		for _, transactionSize := range []int{5000} {
+			v = append(v,
+				[]TestedDatabaseSystem{
+					{
+						Name: "badger_" + strconv.Itoa(transactionSize),
+						DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
+							return NewBadgerDatabaseSystem(dir, func(options *badger.Options) {
+								options.Compression = badgeroptions.None
+							}, transactionSize)
+						},
 					},
-				},
-				{
-					Name: "badger_snappy",
-					DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
-						return NewBadgerDatabaseSystem(dir, func(options *badger.Options) {
-							options.Compression = badgeroptions.Snappy
-						})
+					{
+						Name: "badger_snappy_" + strconv.Itoa(transactionSize),
+						DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
+							return NewBadgerDatabaseSystem(dir, func(options *badger.Options) {
+								options.Compression = badgeroptions.Snappy
+							}, transactionSize)
+						},
 					},
-				},
-				{
-					Name: "badger_zstd",
-					DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
-						return NewBadgerDatabaseSystem(dir, func(options *badger.Options) {
-							options.Compression = badgeroptions.ZSTD
-						})
+					{
+						Name: "badger_zstd_" + strconv.Itoa(transactionSize),
+						DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
+							return NewBadgerDatabaseSystem(dir, func(options *badger.Options) {
+								options.Compression = badgeroptions.ZSTD
+							}, transactionSize)
+						},
 					},
-				},
-			}...,
-		)
+				}...,
+			)
+		}
 	} else {
 		tb.Log("ENABLE_BADGER is not set")
 	}
@@ -278,7 +283,7 @@ type BenchmarkFunc func(b *testing.B, databaseSystem DatabaseSystem, env Benchma
 func getBenchmarks() []Benchmark {
 	var benchmarks []Benchmark
 
-	const numberOfAppendsToPerform = 1000
+	const numberOfAppendsToPerform = 5000
 
 	benchmarks = append(benchmarks, []Benchmark{
 		{
@@ -302,7 +307,7 @@ func getBenchmarks() []Benchmark {
 	}...)
 
 	const readRandomSequencesMaxSequence = 100000
-	const readRandomSequencesNumberOfSequencesToRead = 1000
+	const readRandomSequencesNumberOfSequencesToRead = 5000
 
 	benchmarks = append(benchmarks, []Benchmark{
 		{

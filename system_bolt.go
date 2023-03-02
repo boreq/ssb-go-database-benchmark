@@ -14,11 +14,12 @@ type BoltCodec interface {
 }
 
 type BoltDatabaseSystem struct {
-	db    *bbolt.DB
-	codec BoltCodec
+	db              *bbolt.DB
+	codec           BoltCodec
+	transactionSize int
 }
 
-func NewBoltDatabaseSystem(dir string, fn func(options *bbolt.Options), codec BoltCodec) (*BoltDatabaseSystem, error) {
+func NewBoltDatabaseSystem(dir string, fn func(options *bbolt.Options), codec BoltCodec, transactionSize int) (*BoltDatabaseSystem, error) {
 	options := *bbolt.DefaultOptions
 
 	if fn != nil {
@@ -31,11 +32,11 @@ func NewBoltDatabaseSystem(dir string, fn func(options *bbolt.Options), codec Bo
 		return nil, errors.Wrap(err, "error opening the database")
 	}
 
-	return &BoltDatabaseSystem{db: db, codec: codec}, nil
+	return &BoltDatabaseSystem{db: db, codec: codec, transactionSize: transactionSize}, nil
 }
 
 func (b *BoltDatabaseSystem) PreferredTransactionSize() int {
-	return 1000
+	return b.transactionSize
 }
 
 func (b *BoltDatabaseSystem) Update(fn func(updater Updater) error) error {

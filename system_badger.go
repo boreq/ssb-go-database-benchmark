@@ -6,10 +6,11 @@ import (
 )
 
 type BadgerDatabaseSystem struct {
-	db *badger.DB
+	preferredTransactionSize int
+	db                       *badger.DB
 }
 
-func NewBadgerDatabaseSystem(dir string, fn func(*badger.Options)) (*BadgerDatabaseSystem, error) {
+func NewBadgerDatabaseSystem(dir string, fn func(*badger.Options), preferredTransactionSize int) (*BadgerDatabaseSystem, error) {
 	opt := badger.
 		DefaultOptions(dir).
 		WithLoggingLevel(badger.ERROR)
@@ -23,11 +24,11 @@ func NewBadgerDatabaseSystem(dir string, fn func(*badger.Options)) (*BadgerDatab
 		return nil, errors.Wrap(err, "error opening the database")
 	}
 
-	return &BadgerDatabaseSystem{db: db}, nil
+	return &BadgerDatabaseSystem{db: db, preferredTransactionSize: preferredTransactionSize}, nil
 }
 
 func (b *BadgerDatabaseSystem) PreferredTransactionSize() int {
-	return 100
+	return b.preferredTransactionSize
 }
 
 func (b *BadgerDatabaseSystem) Update(fn func(updater Updater) error) error {
