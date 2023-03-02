@@ -1,7 +1,7 @@
 package fixtures
 
 import (
-	"math/rand"
+	"crypto/rand"
 	"os"
 	"testing"
 )
