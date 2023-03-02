@@ -2,10 +2,12 @@ package db_benchmark
 
 import (
 	"bytes"
+	"context"
 	"io"
 
 	"github.com/boreq/errors"
 	"github.com/golang/snappy"
+	"go.cryptoscope.co/luigi"
 	"go.cryptoscope.co/margaret"
 	"go.cryptoscope.co/margaret/offset2"
 )
@@ -28,13 +30,55 @@ func (b *MargaretDatabaseSystem) PreferredTransactionSize() int {
 }
 
 func (b *MargaretDatabaseSystem) Update(fn func(updater Updater) error) error {
-	v := NewMargaretReaderUpdater(b.log)
-	return fn(v)
+	return fn(b)
 }
 
 func (b *MargaretDatabaseSystem) Read(fn func(reader Reader) error) error {
-	v := NewMargaretReaderUpdater(b.log)
-	return fn(v)
+	return fn(b)
+}
+
+func (b *MargaretDatabaseSystem) Iterate(start Sequence, limit int, fn func(item Item) error) error {
+	query, err := b.log.Query(
+		margaret.Gte(int64(start)),
+		margaret.Limit(limit),
+		margaret.SeqWrap(true),
+	)
+	if err != nil {
+		return errors.Wrap(err, "error performing a query")
+	}
+
+	for {
+		obj, err := query.Next(context.Background())
+		if err != nil {
+			if luigi.IsEOS(err) {
+				return nil
+			}
+			return errors.Wrap(err, "error getting the next value")
+		}
+
+		seqWrapper, ok := obj.(margaret.SeqWrapper)
+		if !ok {
+			return errors.New("got a wrong type")
+		}
+
+		if err := fn(Item{Sequence(seqWrapper.Seq()), seqWrapper.Value().([]byte)}); err != nil {
+			return errors.Wrap(err, "function returned an error")
+		}
+	}
+}
+
+func (m *MargaretDatabaseSystem) Append(value []byte) error {
+	_, err := m.log.Append(value)
+	return err
+}
+
+func (m *MargaretDatabaseSystem) Get(seq Sequence) ([]byte, error) {
+	v, err := m.log.Get(int64(seq))
+	if err != nil {
+		return nil, errors.Wrap(err, "error calling get")
+	}
+
+	return v.([]byte), nil
 }
 
 func (b *MargaretDatabaseSystem) Close() error {
@@ -43,28 +87,6 @@ func (b *MargaretDatabaseSystem) Close() error {
 
 func (b *MargaretDatabaseSystem) Sync() error {
 	return nil
-}
-
-type MargaretReaderUpdater struct {
-	log *offset2.OffsetLog
-}
-
-func NewMargaretReaderUpdater(log *offset2.OffsetLog) *MargaretReaderUpdater {
-	return &MargaretReaderUpdater{log: log}
-}
-
-func (m *MargaretReaderUpdater) Append(value []byte) error {
-	_, err := m.log.Append(value)
-	return err
-}
-
-func (m *MargaretReaderUpdater) Get(seq Sequence) ([]byte, error) {
-	v, err := m.log.Get(int64(seq))
-	if err != nil {
-		return nil, errors.Wrap(err, "error calling get")
-	}
-
-	return v.([]byte), nil
 }
 
 type MargaretCodec struct {

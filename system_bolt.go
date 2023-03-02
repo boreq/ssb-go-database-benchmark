@@ -120,6 +120,25 @@ func (t *TxBoltDatabaseSystem) Get(seq Sequence) ([]byte, error) {
 	return value, nil
 }
 
+func (t *TxBoltDatabaseSystem) Iterate(start Sequence, limit int, fn func(item Item) error) error {
+	c := t.bucket.Cursor()
+	counter := 0
+
+	for k, v := c.Seek(marshalSequence(start)); k != nil; k, v = c.Next() {
+		seq := unmarshalSequence(k)
+		if err := fn(Item{seq, v}); err != nil {
+			return errors.Wrap(err, "function returned an error")
+		}
+
+		counter++
+		if counter >= limit {
+			break
+		}
+	}
+
+	return nil
+}
+
 func (t *TxBoltDatabaseSystem) getNextSequence() (Sequence, error) {
 	seqInt, err := t.bucket.NextSequence()
 	if err != nil {

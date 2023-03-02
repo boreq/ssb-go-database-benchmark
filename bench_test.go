@@ -384,6 +384,44 @@ func getBenchmarks() []Benchmark {
 				return nil
 			},
 		},
+		{
+			Name: "read_iterate",
+			SetupFunc: func(b *testing.B, databaseSystem DatabaseSystem, env BenchmarkEnvironment) error {
+				for _, n := range batch(readRandomSequencesMaxSequence, databaseSystem.PreferredTransactionSize()) {
+					if err := databaseSystem.Update(func(updater Updater) error {
+						for i := 0; i <= n; i++ {
+							if err := updater.Append(env.DataConstructor.Fn()); err != nil {
+								return errors.Wrap(err, "error calling set")
+							}
+						}
+						return nil
+					}); err != nil {
+						return errors.Wrap(err, "error calling update")
+					}
+				}
+				return nil
+			},
+			Func: func(b *testing.B, databaseSystem DatabaseSystem, env BenchmarkEnvironment) error {
+				for _, n := range batch(readRandomSequencesNumberOfSequencesToRead, databaseSystem.PreferredTransactionSize()) {
+					if err := databaseSystem.Read(func(reader Reader) error {
+						for i := 0; i < n; i++ {
+							if err := reader.Iterate(
+								Sequence(rand.Intn(readRandomSequencesMaxSequence)),
+								readRandomSequencesNumberOfSequencesToRead,
+								func(item Item) error {
+									return nil
+								}); err != nil {
+								return errors.Wrap(err, "error iterating")
+							}
+						}
+						return nil
+					}); err != nil {
+						return errors.Wrap(err, "error calling read")
+					}
+				}
+				return nil
+			},
+		},
 	}...)
 
 	return benchmarks

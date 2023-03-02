@@ -103,6 +103,31 @@ func (t *TxBadgerDatabaseSystem) Get(seq Sequence) ([]byte, error) {
 	return value, nil
 }
 
+func (t *TxBadgerDatabaseSystem) Iterate(start Sequence, limit int, fn func(item Item) error) error {
+	it := t.tx.NewIterator(badger.DefaultIteratorOptions)
+	defer it.Close()
+
+	counter := 0
+	for it.Seek(t.valueKey(start)); it.Valid(); it.Next() {
+		item := it.Item()
+		if err := item.Value(func(val []byte) error {
+			seq := unmarshalSequence(item.Key())
+			if err := fn(Item{seq, val}); err != nil {
+				return errors.Wrap(err, "function returned an error")
+			}
+			return nil
+		}); err != nil {
+			return errors.Wrap(err, "error getting value")
+		}
+
+		counter++
+		if counter >= limit {
+			break
+		}
+	}
+	return nil
+}
+
 func (t *TxBadgerDatabaseSystem) getNextSequence() (Sequence, error) {
 	item, err := t.tx.Get(badgerLastSequenceKey)
 	if err != nil {

@@ -1,6 +1,8 @@
 package db_benchmark
 
-import "encoding/binary"
+import (
+	"encoding/binary"
+)
 
 type DatabaseSystem interface {
 	Update(func(updater Updater) error) error
@@ -16,6 +18,12 @@ type Updater interface {
 
 type Reader interface {
 	Get(seq Sequence) ([]byte, error)
+	Iterate(start Sequence, limit int, fn func(item Item) error) error
+}
+
+type Item struct {
+	Sequence Sequence
+	Value    []byte
 }
 
 type Sequence uint64
