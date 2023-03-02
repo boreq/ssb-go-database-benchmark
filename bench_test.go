@@ -157,9 +157,6 @@ type TestedDatabaseSystem struct {
 type DatabaseSystemConstructor func(dir string) (DatabaseSystem, error)
 
 func getDatabaseSystems(tb testing.TB) []TestedDatabaseSystem {
-	const badgerValueThreshold = 256
-	const badgerValueLogFileSize = 32 * 1024 * 1024
-
 	var v []TestedDatabaseSystem
 
 	if os.Getenv("ENABLE_BBOLT") != "" {
@@ -213,36 +210,6 @@ func getDatabaseSystems(tb testing.TB) []TestedDatabaseSystem {
 					DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
 						return NewBadgerDatabaseSystem(dir, func(options *badger.Options) {
 							options.Compression = badgeroptions.ZSTD
-						})
-					},
-				},
-				{
-					Name: "badger_threshold",
-					DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
-						return NewBadgerDatabaseSystem(dir, func(options *badger.Options) {
-							options.Compression = badgeroptions.None
-							options.ValueThreshold = badgerValueThreshold
-							options.ValueLogFileSize = badgerValueLogFileSize
-						})
-					},
-				},
-				{
-					Name: "badger_snappy_threshold",
-					DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
-						return NewBadgerDatabaseSystem(dir, func(options *badger.Options) {
-							options.Compression = badgeroptions.Snappy
-							options.ValueThreshold = badgerValueThreshold
-							options.ValueLogFileSize = badgerValueLogFileSize
-						})
-					},
-				},
-				{
-					Name: "badger_zstd_threshold",
-					DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
-						return NewBadgerDatabaseSystem(dir, func(options *badger.Options) {
-							options.Compression = badgeroptions.ZSTD
-							options.ValueThreshold = badgerValueThreshold
-							options.ValueLogFileSize = badgerValueLogFileSize
 						})
 					},
 				},
