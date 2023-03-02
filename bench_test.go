@@ -16,13 +16,10 @@ import (
 )
 
 func BenchmarkPerformance(b *testing.B) {
-	testedDatabaseSystems := getDatabaseSystems()
+	testedDatabaseSystems := getDatabaseSystems(b)
 	benchmarks := getBenchmarks()
-	dataConstructors := getDataConstructors()
-	storageSystems, err := getStorageSystems()
-	if err != nil {
-		b.Fatal(err)
-	}
+	dataConstructors := getDataConstructors(b)
+	storageSystems := getStorageSystems(b)
 
 	for i := 0; i < b.N; i++ {
 		for _, testedDatabaseSystem := range testedDatabaseSystems {
@@ -80,8 +77,8 @@ func BenchmarkPerformance(b *testing.B) {
 }
 
 func BenchmarkSize(b *testing.B) {
-	testedDatabaseSystems := getDatabaseSystems()
-	dataConstructors := getDataConstructors()
+	testedDatabaseSystems := getDatabaseSystems(b)
+	dataConstructors := getDataConstructors(b)
 
 	for i := 0; i < b.N; i++ {
 		for _, testedDatabaseSystem := range testedDatabaseSystems {
@@ -159,112 +156,130 @@ type TestedDatabaseSystem struct {
 
 type DatabaseSystemConstructor func(dir string) (DatabaseSystem, error)
 
-func getDatabaseSystems() []TestedDatabaseSystem {
+func getDatabaseSystems(tb testing.TB) []TestedDatabaseSystem {
 	const badgerValueThreshold = 256
 	const badgerValueLogFileSize = 32 * 1024 * 1024
 
-	return []TestedDatabaseSystem{
-		{
-			Name: "bbolt",
-			DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
-				return NewBoltDatabaseSystem(dir, nil, NewNoopBoltCodec())
-			},
-		},
-		{
-			Name: "bbolt_snappy",
-			DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
-				return NewBoltDatabaseSystem(dir, nil, NewSnappyBoltCodec())
-			},
-		},
-		{
-			Name: "bbolt_zstd",
-			DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
-				return NewBoltDatabaseSystem(dir, nil, NewZSTDBoltCodec())
-			},
-		},
+	var v []TestedDatabaseSystem
 
-		{
-			Name: "badger",
-			DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
-				return NewBadgerDatabaseSystem(dir, func(options *badger.Options) {
-					options.Compression = badgeroptions.None
-				})
-			},
-		},
-		{
-			Name: "badger_snappy",
-			DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
-				return NewBadgerDatabaseSystem(dir, func(options *badger.Options) {
-					options.Compression = badgeroptions.Snappy
-				})
-			},
-		},
-		{
-			Name: "badger_zstd",
-			DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
-				return NewBadgerDatabaseSystem(dir, func(options *badger.Options) {
-					options.Compression = badgeroptions.ZSTD
-				})
-			},
-		},
-		{
-			Name: "badger_snappy_threshold",
-			DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
-				return NewBadgerDatabaseSystem(dir, func(options *badger.Options) {
-					options.Compression = badgeroptions.Snappy
-					options.ValueThreshold = badgerValueThreshold
-					options.ValueLogFileSize = badgerValueLogFileSize
-				})
-			},
-		},
-		{
-			Name: "badger_zstd_threshold",
-			DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
-				return NewBadgerDatabaseSystem(dir, func(options *badger.Options) {
-					options.Compression = badgeroptions.ZSTD
-					options.ValueThreshold = badgerValueThreshold
-					options.ValueLogFileSize = badgerValueLogFileSize
-				})
-			},
-		},
-		{
-			Name: "badger_snappy_sync",
-			DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
-				return NewBadgerDatabaseSystem(dir, func(options *badger.Options) {
-					options.Compression = badgeroptions.Snappy
-					options.SyncWrites = true
-				})
-			},
-		},
-		{
-			Name: "badger_zstd_sync",
-			DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
-				return NewBadgerDatabaseSystem(dir, func(options *badger.Options) {
-					options.Compression = badgeroptions.ZSTD
-					options.SyncWrites = true
-				})
-			},
-		},
-
-		{
-			Name: "margaret",
-			DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
-				return NewMargaretDatabaseSystem(dir, NewMargaretCodec())
-			},
-		},
-		{
-			Name: "margaret_snappy",
-			DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
-				return NewMargaretDatabaseSystem(dir, NewMargaretSnappyCodec())
-			},
-		},
-		{
-			Name: "margaret_zstd",
-			DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
-				return NewMargaretDatabaseSystem(dir, NewMargaretZSTDCodec())
-			},
-		},
+	if os.Getenv("ENABLE_BBOLT") != "" {
+		v = append(v,
+			[]TestedDatabaseSystem{
+				{
+					Name: "bbolt",
+					DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
+						return NewBoltDatabaseSystem(dir, nil, NewNoopBoltCodec())
+					},
+				},
+				{
+					Name: "bbolt_snappy",
+					DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
+						return NewBoltDatabaseSystem(dir, nil, NewSnappyBoltCodec())
+					},
+				},
+				{
+					Name: "bbolt_zstd",
+					DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
+						return NewBoltDatabaseSystem(dir, nil, NewZSTDBoltCodec())
+					},
+				},
+			}...,
+		)
+	} else {
+		tb.Log("ENABLE_BBOLT is not set")
 	}
+
+	if os.Getenv("ENABLE_BADGER") != "" {
+		v = append(v,
+			[]TestedDatabaseSystem{
+				{
+					Name: "badger",
+					DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
+						return NewBadgerDatabaseSystem(dir, func(options *badger.Options) {
+							options.Compression = badgeroptions.None
+						})
+					},
+				},
+				{
+					Name: "badger_snappy",
+					DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
+						return NewBadgerDatabaseSystem(dir, func(options *badger.Options) {
+							options.Compression = badgeroptions.Snappy
+						})
+					},
+				},
+				{
+					Name: "badger_zstd",
+					DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
+						return NewBadgerDatabaseSystem(dir, func(options *badger.Options) {
+							options.Compression = badgeroptions.ZSTD
+						})
+					},
+				},
+				{
+					Name: "badger_threshold",
+					DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
+						return NewBadgerDatabaseSystem(dir, func(options *badger.Options) {
+							options.Compression = badgeroptions.None
+							options.ValueThreshold = badgerValueThreshold
+							options.ValueLogFileSize = badgerValueLogFileSize
+						})
+					},
+				},
+				{
+					Name: "badger_snappy_threshold",
+					DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
+						return NewBadgerDatabaseSystem(dir, func(options *badger.Options) {
+							options.Compression = badgeroptions.Snappy
+							options.ValueThreshold = badgerValueThreshold
+							options.ValueLogFileSize = badgerValueLogFileSize
+						})
+					},
+				},
+				{
+					Name: "badger_zstd_threshold",
+					DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
+						return NewBadgerDatabaseSystem(dir, func(options *badger.Options) {
+							options.Compression = badgeroptions.ZSTD
+							options.ValueThreshold = badgerValueThreshold
+							options.ValueLogFileSize = badgerValueLogFileSize
+						})
+					},
+				},
+			}...,
+		)
+	} else {
+		tb.Log("ENABLE_BADGER is not set")
+	}
+
+	if os.Getenv("ENABLE_MARGARET") != "" {
+		v = append(v,
+			[]TestedDatabaseSystem{
+				{
+					Name: "margaret",
+					DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
+						return NewMargaretDatabaseSystem(dir, NewMargaretCodec())
+					},
+				},
+				{
+					Name: "margaret_snappy",
+					DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
+						return NewMargaretDatabaseSystem(dir, NewMargaretSnappyCodec())
+					},
+				},
+				{
+					Name: "margaret_zstd",
+					DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
+						return NewMargaretDatabaseSystem(dir, NewMargaretZSTDCodec())
+					},
+				},
+			}...,
+		)
+	} else {
+		tb.Log("ENABLE_MARGARET is not set")
+	}
+
+	return v
 }
 
 type BenchmarkEnvironment struct {
@@ -393,18 +408,34 @@ type StorageSystem struct {
 	Path string
 }
 
-func getStorageSystems() ([]StorageSystem, error) {
+func getStorageSystems(tb testing.TB) []StorageSystem {
+	var v []StorageSystem
+
 	fast := os.Getenv("STORAGE_FAST")
 	if fast == "" {
-		return nil, errors.New("please set STORAGE_FAST")
+		tb.Log("STORAGE_FAST not set")
+	} else {
+		v = append(v,
+			StorageSystem{
+				Name: "fast_storage",
+				Path: fast,
+			},
+		)
 	}
 
-	return []StorageSystem{
-		{
-			Name: "fast",
-			Path: fast,
-		},
-	}, nil
+	slow := os.Getenv("STORAGE_SLOW")
+	if slow == "" {
+		tb.Log("STORAGE_SLOW not set")
+	} else {
+		v = append(v,
+			StorageSystem{
+				Name: "slow_storage",
+				Path: slow,
+			},
+		)
+	}
+
+	return v
 }
 
 type DataConstructor struct {
@@ -412,40 +443,55 @@ type DataConstructor struct {
 	Fn   func() []byte
 }
 
-func getDataConstructors() []DataConstructor {
-	return []DataConstructor{
-		{
-			Name: "random",
-			Fn: func() []byte {
-				return fixtures.RandomBytes(1000)
+func getDataConstructors(tb testing.TB) []DataConstructor {
+	var v []DataConstructor
+
+	if os.Getenv("ENABLE_DATA_RANDOM") != "" {
+		v = append(v,
+			DataConstructor{
+				Name: "random_data",
+				Fn: func() []byte {
+					return fixtures.RandomBytes(1000)
+				},
 			},
-		},
-		{
-			Name: "similar_to_ssb_messages",
-			Fn: func() []byte {
-				return []byte(
-					fmt.Sprintf(
-						`{
-						"previous": "%%%s.sha256",
-						"author": "@%s.ed25519",
-						"sequence": %d,
-						"timestamp": %d,
-						"hash": "sha256",
-						"content": {
-							"type": "post",
-							"text": "%s"
-						}
-					}`,
-						base64.StdEncoding.EncodeToString(fixtures.RandomBytes(32)),
-						base64.StdEncoding.EncodeToString(fixtures.RandomBytes(32)),
-						rand.Uint64()%10000,
-						rand.Uint64(),
-						base64.StdEncoding.EncodeToString(fixtures.RandomBytes(100)),
-					),
-				)
-			},
-		},
+		)
+	} else {
+		tb.Log("ENABLE_DATA_RANDOM is not set")
 	}
+
+	if os.Getenv("ENABLE_DATA_LIKE_SSB") != "" {
+		v = append(v,
+			DataConstructor{
+				Name: "data_similar_to_ssb_messages",
+				Fn: func() []byte {
+					return []byte(
+						fmt.Sprintf(
+							`{
+	"previous": "%%%s.sha256",
+	"author": "@%s.ed25519",
+	"sequence": %d,
+	"timestamp": %d,
+	"hash": "sha256",
+	"content": {
+		"type": "post",
+		"text": "%s"
+	}
+}`,
+							base64.StdEncoding.EncodeToString(fixtures.RandomBytes(32)),
+							base64.StdEncoding.EncodeToString(fixtures.RandomBytes(32)),
+							rand.Uint64()%10000,
+							rand.Uint64(),
+							base64.StdEncoding.EncodeToString(fixtures.RandomBytes(100)),
+						),
+					)
+				},
+			},
+		)
+	} else {
+		tb.Log("ENABLE_DATA_LIKE_SSB is not set")
+	}
+
+	return v
 }
 
 func dirSize(path string) (int64, error) {
