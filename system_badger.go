@@ -2,7 +2,7 @@ package db_benchmark
 
 import (
 	"github.com/boreq/errors"
-	"github.com/dgraph-io/badger/v3"
+	"github.com/dgraph-io/badger/v4"
 )
 
 type BadgerDatabaseSystem struct {

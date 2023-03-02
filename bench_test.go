@@ -10,8 +10,8 @@ import (
 
 	"github.com/boreq/db_benchmark/fixtures"
 	"github.com/boreq/errors"
-	"github.com/dgraph-io/badger/v3"
-	badgeroptions "github.com/dgraph-io/badger/v3/options"
+	"github.com/dgraph-io/badger/v4"
+	badgeroptions "github.com/dgraph-io/badger/v4/options"
 	"github.com/stretchr/testify/require"
 )
 
@@ -224,6 +224,24 @@ func getDatabaseSystems() []TestedDatabaseSystem {
 					options.Compression = badgeroptions.ZSTD
 					options.ValueThreshold = badgerValueThreshold
 					options.ValueLogFileSize = badgerValueLogFileSize
+				})
+			},
+		},
+		{
+			Name: "badger_snappy_sync",
+			DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
+				return NewBadgerDatabaseSystem(dir, func(options *badger.Options) {
+					options.Compression = badgeroptions.Snappy
+					options.SyncWrites = true
+				})
+			},
+		},
+		{
+			Name: "badger_zstd_sync",
+			DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
+				return NewBadgerDatabaseSystem(dir, func(options *badger.Options) {
+					options.Compression = badgeroptions.ZSTD
+					options.SyncWrites = true
 				})
 			},
 		},
