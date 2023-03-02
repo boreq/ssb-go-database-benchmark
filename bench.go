@@ -7,6 +7,7 @@ type DatabaseSystem interface {
 	Read(func(reader Reader) error) error
 	Sync() error
 	Close() error
+	PreferredTransactionSize() int
 }
 
 type Updater interface {

@@ -168,20 +168,27 @@ func getDatabaseSystems(tb testing.TB) []TestedDatabaseSystem {
 						return NewBoltDatabaseSystem(dir, nil, NewNoopBoltCodec())
 					},
 				},
-				{
-					Name: "bbolt_snappy",
-					DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
-						return NewBoltDatabaseSystem(dir, nil, NewSnappyBoltCodec())
-					},
-				},
-				{
-					Name: "bbolt_zstd",
-					DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
-						return NewBoltDatabaseSystem(dir, nil, NewZSTDBoltCodec())
-					},
-				},
 			}...,
 		)
+
+		if os.Getenv("ENABLE_BOLT_ON_COMPRESSION") != "" {
+			v = append(v,
+				[]TestedDatabaseSystem{
+					{
+						Name: "bbolt_snappy",
+						DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
+							return NewBoltDatabaseSystem(dir, nil, NewSnappyBoltCodec())
+						},
+					},
+					{
+						Name: "bbolt_zstd",
+						DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
+							return NewBoltDatabaseSystem(dir, nil, NewZSTDBoltCodec())
+						},
+					},
+				}...,
+			)
+		}
 	} else {
 		tb.Log("ENABLE_BBOLT is not set")
 	}
@@ -228,20 +235,27 @@ func getDatabaseSystems(tb testing.TB) []TestedDatabaseSystem {
 						return NewMargaretDatabaseSystem(dir, NewMargaretCodec())
 					},
 				},
-				{
-					Name: "margaret_snappy",
-					DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
-						return NewMargaretDatabaseSystem(dir, NewMargaretSnappyCodec())
-					},
-				},
-				{
-					Name: "margaret_zstd",
-					DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
-						return NewMargaretDatabaseSystem(dir, NewMargaretZSTDCodec())
-					},
-				},
 			}...,
 		)
+
+		if os.Getenv("ENABLE_BOLT_ON_COMPRESSION") != "" {
+			v = append(v,
+				[]TestedDatabaseSystem{
+					{
+						Name: "margaret_snappy",
+						DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
+							return NewMargaretDatabaseSystem(dir, NewMargaretSnappyCodec())
+						},
+					},
+					{
+						Name: "margaret_zstd",
+						DatabaseSystemConstructor: func(dir string) (DatabaseSystem, error) {
+							return NewMargaretDatabaseSystem(dir, NewMargaretZSTDCodec())
+						},
+					},
+				}...,
+			)
+		}
 	} else {
 		tb.Log("ENABLE_MARGARET is not set")
 	}
@@ -264,39 +278,39 @@ type BenchmarkFunc func(b *testing.B, databaseSystem DatabaseSystem, env Benchma
 func getBenchmarks() []Benchmark {
 	var benchmarks []Benchmark
 
-	const numberOfAppendsToPerformPerTransaction = 1000
+	const numberOfAppendsToPerform = 1000
 
 	benchmarks = append(benchmarks, []Benchmark{
 		{
 			Name: "append",
 			Func: func(b *testing.B, databaseSystem DatabaseSystem, env BenchmarkEnvironment) error {
-				if err := databaseSystem.Update(func(updater Updater) error {
-					for i := 0; i < numberOfAppendsToPerformPerTransaction; i++ {
-						if err := updater.Append(env.DataConstructor.Fn()); err != nil {
-							return errors.Wrap(err, "error calling set")
+				for _, n := range batch(numberOfAppendsToPerform, databaseSystem.PreferredTransactionSize()) {
+					if err := databaseSystem.Update(func(updater Updater) error {
+						for i := 0; i < n; i++ {
+							if err := updater.Append(env.DataConstructor.Fn()); err != nil {
+								return errors.Wrap(err, "error calling set")
+							}
 						}
+						return nil
+					}); err != nil {
+						return errors.Wrap(err, "error calling update")
 					}
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "error calling update")
 				}
-
 				return nil
 			},
 		},
 	}...)
 
 	const readRandomSequencesMaxSequence = 100000
-	const readRandomSequencesInsertBatchSize = 1000
-	const readRandomSequencesNumberOfSequencesToReadPerTransaction = 1000
+	const readRandomSequencesNumberOfSequencesToRead = 1000
 
 	benchmarks = append(benchmarks, []Benchmark{
 		{
 			Name: "read_random",
 			SetupFunc: func(b *testing.B, databaseSystem DatabaseSystem, env BenchmarkEnvironment) error {
-				for i := 0; i < readRandomSequencesMaxSequence/readRandomSequencesInsertBatchSize; i++ {
+				for _, n := range batch(readRandomSequencesMaxSequence, databaseSystem.PreferredTransactionSize()) {
 					if err := databaseSystem.Update(func(updater Updater) error {
-						for i := 0; i <= readRandomSequencesInsertBatchSize; i++ {
+						for i := 0; i <= n; i++ {
 							if err := updater.Append(env.DataConstructor.Fn()); err != nil {
 								return errors.Wrap(err, "error calling set")
 							}
@@ -306,34 +320,34 @@ func getBenchmarks() []Benchmark {
 						return errors.Wrap(err, "error calling update")
 					}
 				}
-
 				return nil
 			},
 			Func: func(b *testing.B, databaseSystem DatabaseSystem, env BenchmarkEnvironment) error {
-				if err := databaseSystem.Read(func(reader Reader) error {
-					for i := 0; i < readRandomSequencesNumberOfSequencesToReadPerTransaction; i++ {
-						value, err := reader.Get(Sequence(rand.Intn(readRandomSequencesMaxSequence + 1)))
-						if err != nil {
-							return errors.Wrap(err, "error calling get")
+				for _, n := range batch(readRandomSequencesNumberOfSequencesToRead, databaseSystem.PreferredTransactionSize()) {
+					if err := databaseSystem.Read(func(reader Reader) error {
+						for i := 0; i < n; i++ {
+							value, err := reader.Get(Sequence(rand.Intn(readRandomSequencesMaxSequence + 1)))
+							if err != nil {
+								return errors.Wrap(err, "error calling get")
+							}
+							if len(value) == 0 {
+								b.Fatal("got an empty value")
+							}
 						}
-
-						require.NotEmpty(b, value)
+						return nil
+					}); err != nil {
+						return errors.Wrap(err, "error calling read")
 					}
-
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "error calling read")
 				}
-
 				return nil
 			},
 		},
 		{
 			Name: "read_sequential",
 			SetupFunc: func(b *testing.B, databaseSystem DatabaseSystem, env BenchmarkEnvironment) error {
-				for i := 0; i < readRandomSequencesMaxSequence/readRandomSequencesInsertBatchSize; i++ {
+				for _, n := range batch(readRandomSequencesMaxSequence, databaseSystem.PreferredTransactionSize()) {
 					if err := databaseSystem.Update(func(updater Updater) error {
-						for i := 0; i <= readRandomSequencesInsertBatchSize; i++ {
+						for i := 0; i <= n; i++ {
 							if err := updater.Append(env.DataConstructor.Fn()); err != nil {
 								return errors.Wrap(err, "error calling set")
 							}
@@ -343,25 +357,25 @@ func getBenchmarks() []Benchmark {
 						return errors.Wrap(err, "error calling update")
 					}
 				}
-
 				return nil
 			},
 			Func: func(b *testing.B, databaseSystem DatabaseSystem, env BenchmarkEnvironment) error {
-				if err := databaseSystem.Read(func(reader Reader) error {
-					for i := 0; i < readRandomSequencesNumberOfSequencesToReadPerTransaction; i++ {
-						value, err := reader.Get(Sequence(i))
-						if err != nil {
-							return errors.Wrap(err, "error calling get")
+				for _, n := range batch(readRandomSequencesNumberOfSequencesToRead, databaseSystem.PreferredTransactionSize()) {
+					if err := databaseSystem.Read(func(reader Reader) error {
+						for i := 0; i < n; i++ {
+							value, err := reader.Get(Sequence(i))
+							if err != nil {
+								return errors.Wrap(err, "error calling get")
+							}
+							if len(value) == 0 {
+								b.Fatal("got an empty value")
+							}
 						}
-
-						require.NotEmpty(b, value)
+						return nil
+					}); err != nil {
+						return errors.Wrap(err, "error calling read")
 					}
-
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "error calling read")
 				}
-
 				return nil
 			},
 		},
@@ -473,4 +487,56 @@ func dirSize(path string) (int64, error) {
 		return err
 	})
 	return size, err
+}
+
+func TestBatch(t *testing.T) {
+	require.Equal(t,
+		[]int{
+			100,
+			100,
+		},
+		batch(200, 100),
+	)
+
+	require.Equal(t,
+		[]int{
+			100,
+			100,
+			50,
+		},
+		batch(250, 100),
+	)
+
+	require.Equal(t,
+		[]int{
+			33,
+		},
+		batch(33, 100),
+	)
+
+	require.Equal(t,
+		[]int{
+			33,
+			33,
+			33,
+			1,
+		},
+		batch(100, 33),
+	)
+}
+
+func batch(total, batchSize int) []int {
+	var batches []int
+
+	for {
+		if total > batchSize {
+			batches = append(batches, batchSize)
+			total -= batchSize
+		} else {
+			batches = append(batches, total)
+			break
+		}
+	}
+
+	return batches
 }

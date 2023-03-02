@@ -26,6 +26,10 @@ func NewBadgerDatabaseSystem(dir string, fn func(*badger.Options)) (*BadgerDatab
 	return &BadgerDatabaseSystem{db: db}, nil
 }
 
+func (b *BadgerDatabaseSystem) PreferredTransactionSize() int {
+	return 100
+}
+
 func (b *BadgerDatabaseSystem) Update(fn func(updater Updater) error) error {
 	return b.db.Update(func(tx *badger.Txn) error {
 		updater, err := NewTxBadgerDatabaseSystem(tx)

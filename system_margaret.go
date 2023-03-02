@@ -23,6 +23,10 @@ func NewMargaretDatabaseSystem(dir string, codec margaret.Codec) (*MargaretDatab
 	return &MargaretDatabaseSystem{log: log}, nil
 }
 
+func (b *MargaretDatabaseSystem) PreferredTransactionSize() int {
+	return 1000
+}
+
 func (b *MargaretDatabaseSystem) Update(fn func(updater Updater) error) error {
 	v := NewMargaretReaderUpdater(b.log)
 	return fn(v)

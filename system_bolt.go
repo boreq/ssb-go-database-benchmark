@@ -34,6 +34,10 @@ func NewBoltDatabaseSystem(dir string, fn func(options *bbolt.Options), codec Bo
 	return &BoltDatabaseSystem{db: db, codec: codec}, nil
 }
 
+func (b *BoltDatabaseSystem) PreferredTransactionSize() int {
+	return 1000
+}
+
 func (b *BoltDatabaseSystem) Update(fn func(updater Updater) error) error {
 	return b.db.Update(func(tx *bbolt.Tx) error {
 		updater, err := NewTxBoltDatabaseSystem(tx, b.codec)
