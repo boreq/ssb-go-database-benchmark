@@ -328,21 +328,19 @@ func getBenchmarks() []Benchmark {
 				return nil
 			},
 			Func: func(b *testing.B, databaseSystem DatabaseSystem, env BenchmarkEnvironment) error {
-				for _, n := range batch(readRandomSequencesNumberOfSequencesToRead, databaseSystem.PreferredTransactionSize()) {
-					if err := databaseSystem.Read(func(reader Reader) error {
-						for i := 0; i < n; i++ {
-							value, err := reader.Get(Sequence(rand.Intn(readRandomSequencesMaxSequence + 1)))
-							if err != nil {
-								return errors.Wrap(err, "error calling get")
-							}
-							if len(value) == 0 {
-								b.Fatal("got an empty value")
-							}
+				if err := databaseSystem.Read(func(reader Reader) error {
+					for i := 0; i < readRandomSequencesNumberOfSequencesToRead; i++ {
+						value, err := reader.Get(Sequence(rand.Intn(readRandomSequencesMaxSequence + 1)))
+						if err != nil {
+							return errors.Wrap(err, "error calling get")
 						}
-						return nil
-					}); err != nil {
-						return errors.Wrap(err, "error calling read")
+						if len(value) == 0 {
+							b.Fatal("got an empty value")
+						}
 					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "error calling read")
 				}
 				return nil
 			},
@@ -365,21 +363,19 @@ func getBenchmarks() []Benchmark {
 				return nil
 			},
 			Func: func(b *testing.B, databaseSystem DatabaseSystem, env BenchmarkEnvironment) error {
-				for _, n := range batch(readRandomSequencesNumberOfSequencesToRead, databaseSystem.PreferredTransactionSize()) {
-					if err := databaseSystem.Read(func(reader Reader) error {
-						for i := 0; i < n; i++ {
-							value, err := reader.Get(Sequence(i))
-							if err != nil {
-								return errors.Wrap(err, "error calling get")
-							}
-							if len(value) == 0 {
-								b.Fatal("got an empty value")
-							}
+				if err := databaseSystem.Read(func(reader Reader) error {
+					for i := 0; i < readRandomSequencesNumberOfSequencesToRead; i++ {
+						value, err := reader.Get(Sequence(i))
+						if err != nil {
+							return errors.Wrap(err, "error calling get")
 						}
-						return nil
-					}); err != nil {
-						return errors.Wrap(err, "error calling read")
+						if len(value) == 0 {
+							b.Fatal("got an empty value")
+						}
 					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "error calling read")
 				}
 				return nil
 			},
@@ -402,22 +398,18 @@ func getBenchmarks() []Benchmark {
 				return nil
 			},
 			Func: func(b *testing.B, databaseSystem DatabaseSystem, env BenchmarkEnvironment) error {
-				for _, n := range batch(readRandomSequencesNumberOfSequencesToRead, databaseSystem.PreferredTransactionSize()) {
-					if err := databaseSystem.Read(func(reader Reader) error {
-						for i := 0; i < n; i++ {
-							if err := reader.Iterate(
-								Sequence(rand.Intn(readRandomSequencesMaxSequence)),
-								readRandomSequencesNumberOfSequencesToRead,
-								func(item Item) error {
-									return nil
-								}); err != nil {
-								return errors.Wrap(err, "error iterating")
-							}
-						}
-						return nil
-					}); err != nil {
-						return errors.Wrap(err, "error calling read")
+				if err := databaseSystem.Read(func(reader Reader) error {
+					if err := reader.Iterate(
+						Sequence(rand.Intn(readRandomSequencesMaxSequence)),
+						readRandomSequencesNumberOfSequencesToRead,
+						func(item Item) error {
+							return nil
+						}); err != nil {
+						return errors.Wrap(err, "error iterating")
 					}
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "error calling read")
 				}
 				return nil
 			},
