@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"sort"
 	"strings"
 
 	"github.com/boreq/db_benchmark/report"
@@ -70,8 +71,11 @@ func run() error {
 		readmeBuffer.WriteString(fmt.Sprintf("### %s\n", result.BenchmarkName))
 		readmeBuffer.WriteString(fmt.Sprintf("![](./%s)\n", filename))
 		readmeBuffer.WriteString("```\n")
+		sort.Slice(result.Systems, func(i, j int) bool {
+			return result.Systems[i].NsOp < result.Systems[j].NsOp
+		})
 		for _, system := range result.Systems {
-			readmeBuffer.WriteString(fmt.Sprintf("%s=%.0f ns per op\n", system.SystemName, system.NsOp))
+			readmeBuffer.WriteString(fmt.Sprintf("%20s = %.0f ns per op\n", system.SystemName, system.NsOp))
 		}
 		readmeBuffer.WriteString("```\n")
 
@@ -105,8 +109,11 @@ func run() error {
 		readmeBuffer.WriteString(fmt.Sprintf("### %s\n", result.BenchmarkName))
 		readmeBuffer.WriteString(fmt.Sprintf("![](./%s)\n", filename))
 		readmeBuffer.WriteString("```\n")
+		sort.Slice(result.Systems, func(i, j int) bool {
+			return result.Systems[i].BytesOp < result.Systems[j].BytesOp
+		})
 		for _, system := range result.Systems {
-			readmeBuffer.WriteString(fmt.Sprintf("%s=%.0f bytes per op (n=%d)\n", system.SystemName, system.BytesOp, system.N))
+			readmeBuffer.WriteString(fmt.Sprintf("%20s = %.0f bytes per op (n=%d)\n", system.SystemName, system.BytesOp, system.N))
 		}
 		readmeBuffer.WriteString("```\n")
 
